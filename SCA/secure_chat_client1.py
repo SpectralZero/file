@@ -50,6 +50,7 @@ class ChatClient:
         self.username = self.password = ""
         self.tls_ctx: Optional[ssl.SSLContext] = None
         self.sock: Optional[ssl.SSLSocket] = None
+        self.send_lock = threading.Lock()
         self.running = False       #for controls loops (heartbeat & recv loop)                
         self.recipient = "Everyone"
         

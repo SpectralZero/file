@@ -2547,3 +2547,12 @@ uthenticated as 'jamal'
 2025-05-18 17:41:23,470 - secure_chat.key_management - INFO - Shared key derived successfully
 2025-05-18 17:43:11,208 - secure_chat - INFO - Client 'ahmad' disconnected.
 2025-05-18 17:47:33,988 - secure_chat - INFO - Client 'jamal' disconnected.
+2025-05-18 17:49:08,199 - secure_chat - INFO - Secure-Chat Server listening on 0.0.0.0:4444
+2025-05-18 17:50:08,464 - secure_chat - INFO - Connection from ('192.168.1.31', 3333)
+2025-05-18 17:50:26,741 - secure_chat.key_management - INFO - ECDH key pair generated successfully
+2025-05-18 17:50:33,982 - secure_chat - INFO - Connected to 192.168.1.21:4444
+2025-05-18 17:50:33,982 - secure_chat - INFO - Connection from ('192.168.1.21', 3535)
+2025-05-18 17:50:38,466 - secure_chat - INFO - ('192.168.1.31', 3333) timed out.
+2025-05-18 17:50:38,466 - secure_chat - INFO - Client '('192.168.1.31', 3333)' disconnected.
+2025-05-18 17:51:03,997 - secure_chat - INFO - ('192.168.1.21', 3535) timed out.
+2025-05-18 17:51:03,997 - secure_chat - INFO - Client '('192.168.1.21', 3535)' disconnected.
