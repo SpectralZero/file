@@ -2510,3 +2510,7 @@ uthenticated as 'jamal'
 2025-05-18 16:35:32,414 - secure_chat.key_management - INFO - Shared key derived successfully
 2025-05-18 16:37:13,889 - secure_chat - INFO - Client 'ahmad' disconnected.
 2025-05-18 16:37:14,879 - secure_chat - INFO - Client 'jamal' disconnected.
+2025-05-18 16:49:08,398 - secure_chat - INFO - Secure-Chat Server listening on 0.0.0.0:4444
+2025-05-18 16:50:03,373 - secure_chat - INFO - Secure-Chat Server listening on 0.0.0.0:4444
+2025-05-18 16:52:03,935 - secure_chat - WARNING - TLS handshake failed: [SSL: SSLV3_ALERT_BAD_CERTIFICATE] sslv3 alert bad certificate (_ssl.c:1010)
+2025-05-18 17:05:49,630 - secure_chat - INFO - Secure-Chat Server listening on 0.0.0.0:4444

@@ -1,5 +1,8 @@
 import os
 import ssl
+import datetime
+import ipaddress
+import socket
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -32,8 +35,13 @@ def ensure_cert_in_cert_dir(cert_filename="server_cert.pem", key_filename="serve
 
     # If certificate or key is missing, generate new ones
     if not os.path.exists(cert_path) or not os.path.exists(key_path):
+        try:
+            host_name = socket.gethostname()
+            local_ip  = socket.gethostbyname(host_name)
+        except Exception:
+            local_ip = "127.0.0.1"
         print("  Certificates not found. Generating new ones...")
-        generate_self_signed_cert(cert_path, key_path)
+        generate_self_signed_cert(cert_path, key_path, ip=local_ip)
     else:
         print(f" Certificates already exist: {cert_path}, {key_path}")
 
@@ -91,7 +99,7 @@ def configure_tls_context(certfile, keyfile, purpose, cafile=None):
     except Exception as e:
         raise RuntimeError(f"Failed to configure TLS context: {e}")
 
-def generate_self_signed_cert(cert_path, key_path):
+def generate_self_signed_cert(cert_path, key_path,ip):
     """
     Generates a self-signed SSL certificate and saves it to the specified paths.
 
@@ -121,8 +129,12 @@ def generate_self_signed_cert(cert_path, key_path):
             x509.NameAttribute(x509.NameOID.COMMON_NAME, u'localhost')
         ])
 
+        san_list = [
+            x509.DNSName("localhost"),
+            x509.IPAddress(ipaddress.IPv4Address(ip))
+        ]
         # Create the self-signed certificate
-        cert = (
+        cert_builder = (
             x509.CertificateBuilder()
             .subject_name(subject)
             .issuer_name(issuer)
@@ -130,8 +142,12 @@ def generate_self_signed_cert(cert_path, key_path):
             .serial_number(x509.random_serial_number())  # Generate a unique serial number
             .not_valid_before(datetime.datetime.utcnow())  # Certificate starts being valid immediately
             .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))  # Valid for 1 year
-            .sign(key, hashes.SHA256(), default_backend())  # Sign the certificate with SHA-256
+            .add_extension(
+                x509.SubjectAlternativeName(san_list),
+                critical=False
+            )
         )
+        cert = cert_builder.sign(key, hashes.SHA256(), default_backend())
 
         # Save the private key to the specified path
         with open(key_path, "wb") as key_file:

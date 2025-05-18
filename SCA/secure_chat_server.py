@@ -82,7 +82,7 @@ def start_server(port: int = PORT_DEFAULT) -> None:
 
     raw = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     raw.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    raw.bind(("0.0.0.0", port))
+    raw.bind(("192.168.1.21", port))
     raw.listen(100)
     logger.info("Secure-Chat Server listening on 0.0.0.0:%s", port)
 
