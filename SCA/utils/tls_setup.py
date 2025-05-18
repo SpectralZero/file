@@ -40,6 +40,15 @@ def ensure_cert_in_cert_dir(cert_filename="server_cert.pem", key_filename="serve
             local_ip  = socket.gethostbyname(host_name)
         except Exception:
             local_ip = "127.0.0.1"
+
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.connect(("8.8.8.8", 80))
+            local_ip = sock.getsockname()[0]
+        except Exception:
+            local_ip = "127.0.0.1"
+        finally:
+            sock.close()    
         print("  Certificates not found. Generating new ones...")
         generate_self_signed_cert(cert_path, key_path, ip=local_ip)
     else:
