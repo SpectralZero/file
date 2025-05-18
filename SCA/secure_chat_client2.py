@@ -221,7 +221,13 @@ class ChatClient:
 
     # ── sender / receiver ───────────────────────────────────────────
     def _send_prefixed(self, data: bytes):
-        self.sock.sendall(len(data).to_bytes(4, "big") + data)
+        """
+        Send one framed message (4-byte length + payload) atomically
+        over TLS, protecting against concurrent calls from multiple threads.
+        """
+        chunk = len(data).to_bytes(4, "big") + data
+        with self.send_lock:
+            self.sock.sendall(chunk)
 
 
     def add_sent_file_message(self, file_id: str, file_name: str, file_size: int):

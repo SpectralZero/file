@@ -2520,3 +2520,30 @@ uthenticated as 'jamal'
 2025-05-18 17:24:10,962 - secure_chat - INFO - Secure-Chat Server listening on 0.0.0.0:4444
 2025-05-18 17:28:26,751 - secure_chat - INFO - Secure-Chat Server listening on 0.0.0.0:4444
 2025-05-18 17:34:58,446 - secure_chat - INFO - Secure-Chat Server listening on 0.0.0.0:4444
+2025-05-18 17:37:26,323 - secure_chat - INFO - Secure-Chat Server listening on 0.0.0.0:4444
+2025-05-18 17:37:41,572 - secure_chat - INFO - Connection from ('192.168.1.31', 3333)
+2025-05-18 17:37:41,650 - secure_chat - INFO - [('192.168.1.31', 3333)] logged in as 'ahmad'
+2025-05-18 17:37:41,651 - secure_chat - INFO - [('192.168.1.31', 3333)] authenticated as 'ahmad'
+2025-05-18 17:38:40,428 - secure_chat.key_management - INFO - ECDH key pair generated successfully
+2025-05-18 17:38:50,610 - secure_chat - INFO - Connected to 192.168.1.21:4444
+2025-05-18 17:38:50,610 - secure_chat - INFO - Connection from ('192.168.1.21', 3535)
+2025-05-18 17:38:52,880 - secure_chat - INFO - Authenticated (USB OK)
+2025-05-18 17:38:52,882 - secure_chat - INFO - [('192.168.1.21', 3535)] logged in as 'jamal'
+2025-05-18 17:38:52,882 - secure_chat - INFO - [('192.168.1.21', 3535)] authenticated as 'jamal'
+2025-05-18 17:38:53,032 - secure_chat.key_management - INFO - Shared key derived successfully
+2025-05-18 17:40:42,942 - secure_chat - INFO - jamal timed out.
+2025-05-18 17:40:42,942 - secure_chat - INFO - Client 'jamal' disconnected.
+2025-05-18 17:40:42,942 - secure_chat - WARNING - Connection lost: EOF
+2025-05-18 17:40:49,078 - secure_chat - INFO - Reconnect attempt 1 in 1s …
+2025-05-18 17:40:50,080 - secure_chat.key_management - INFO - ECDH key pair generated successfully
+2025-05-18 17:41:11,132 - secure_chat - WARNING - reconnect failed: [WinError 10060] A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond
+2025-05-18 17:41:11,132 - secure_chat - INFO - Reconnect attempt 2 in 2s …
+2025-05-18 17:41:13,134 - secure_chat.key_management - INFO - ECDH key pair generated successfully
+2025-05-18 17:41:20,157 - secure_chat - INFO - Connected to 192.168.1.21:4444
+2025-05-18 17:41:20,157 - secure_chat - INFO - Connection from ('192.168.1.21', 3535)
+2025-05-18 17:41:23,447 - secure_chat - INFO - Authenticated (USB OK)
+2025-05-18 17:41:23,448 - secure_chat - INFO - [('192.168.1.21', 3535)] logged in as 'jamal'
+2025-05-18 17:41:23,448 - secure_chat - INFO - [('192.168.1.21', 3535)] authenticated as 'jamal'
+2025-05-18 17:41:23,470 - secure_chat.key_management - INFO - Shared key derived successfully
+2025-05-18 17:43:11,208 - secure_chat - INFO - Client 'ahmad' disconnected.
+2025-05-18 17:47:33,988 - secure_chat - INFO - Client 'jamal' disconnected.
