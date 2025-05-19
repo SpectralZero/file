@@ -43,7 +43,7 @@ class FileTransferManager:
         # --- 1) Prepare metadata offer ---
         file_name = os.path.basename(file_path)
         file_size = os.path.getsize(file_path)
-        file_id   = str(uuid4())
+        file_id   = str(uuid4()) # (Universally Unique Identifier) make a unique ID for this file , to ensure no collisions with others on the network
         offer = {
             "type":      "FILE_OFFER",
             "file_id":   file_id,
@@ -53,13 +53,13 @@ class FileTransferManager:
 
         # --- 2) Encrypt & send FILE_OFFER ---
         payload = json.dumps(offer)
-        blob    = encrypt_message(key, payload)
+        blob    = encrypt_message(key, payload) 
         frame   = (
             b"FILE_OFFER " +
             self.chat_client.username.encode() + b" " +
             recipient.encode() + b" " +
             base64.b64encode(blob)
-        )
+        ) 
         self.chat_client._send_prefixed(frame)
 
         # --- 3) Show in sender GUI ---
@@ -141,6 +141,62 @@ class FileTransferManager:
                     base64.b64encode(blob)
                 )
                 self.chat_client._send_prefixed(frame)
+
+    def download_file(self, file_id: str):
+        entry = self.incoming.get(file_id)
+        if not entry or not entry["complete"]:
+            mb.showinfo("Download", "File not fully received yet.")
+            return
+
+        # ask user where to save
+        path = fd.asksaveasfilename(
+            title="Save file as…",
+            initialfile=entry["name"]
+        )
+        if not path:
+            return
+
+        # disable the button immediately
+        self.chat_client.master.after(0,
+            lambda: self.chat_client.set_download_state(file_id, text="0%", state="disabled")
+        )
+
+        def _worker():
+            total_chunks = math.ceil(entry["size"] / CHUNK_SIZE)
+            try:
+                with open(path, "wb") as out:
+                    for idx in range(total_chunks):
+                        out.write(entry["chunks"][idx])
+                        # compute percent
+                        pct = int((idx+1) * 100 / total_chunks)
+                        # schedule UI update
+                        self.chat_client.master.after(0,
+                            lambda p=pct: self.chat_client.set_download_state(
+                                file_id,
+                                text=f"{p}%",
+                                state="disabled"
+                            )
+                        )
+                # open file automatically if desired
+                if os.name == "nt":
+                    os.startfile(path)
+                else:
+                    from subprocess import call
+                    call(["xdg-open", path])
+            except Exception as e:
+                mb.showerror("Error Saving File", str(e))
+            finally:
+                # always re-enable the button at 100%
+                self.chat_client.master.after(0,
+                    lambda: self.chat_client.set_download_state(
+                        file_id,
+                        text="⬇ Download",
+                        state="normal"
+                    )
+                )
+                mb.showinfo("Download Complete", f"Saved to {path}")
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def download_file(self, file_id: str):
         entry = self.incoming.get(file_id)
