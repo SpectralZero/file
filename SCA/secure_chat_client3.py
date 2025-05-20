@@ -10,7 +10,7 @@ Secure-Chat Client
 
 import os, socket, ssl, sys, threading, time, logging
 from typing import Tuple, Optional, Dict
-
+import tkinter.filedialog as fd
 from cryptography.hazmat.primitives import serialization 
 
 import base64, os                                   
@@ -21,7 +21,7 @@ from security import (
 
 import customtkinter as ctk
 from tkinter import messagebox
-
+from security.file_transfer import FileTransferManager
 from ui.login_screen import LoginDialog
 from utils.tls_setup  import configure_tls_context
 from logging_config   import setup_logging
@@ -31,6 +31,7 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
 
 MAX_MSG_LEN = 64 * 1024           # max 64 KB
+CHUNK_SIZE  = 16 * 1024
 
 class AuthRetryError(Exception):
     """Wrong password / temporary lock - show dialog again."""
@@ -49,8 +50,11 @@ class ChatClient:
         self.username = self.password = ""
         self.tls_ctx: Optional[ssl.SSLContext] = None
         self.sock: Optional[ssl.SSLSocket] = None
+        self.send_lock = threading.Lock()
         self.running = False       #for controls loops (heartbeat & recv loop)                
         self.recipient = "Everyone"
+        
+        self.file_manager = FileTransferManager(self, self)
 
         # E2E keys
         self.priv, self.pub = generate_ecdh_keypair()
@@ -218,19 +222,93 @@ class ChatClient:
 
     # ── sender / receiver ───────────────────────────────────────────
     def _send_prefixed(self, data: bytes):
-        self.sock.sendall(len(data).to_bytes(4, "big") + data)
+        """
+        Send one framed message (4-byte length + payload) atomically
+        over TLS, protecting against concurrent calls from multiple threads.
+        """
+        chunk = len(data).to_bytes(4, "big") + data
+        with self.send_lock:
+            self.sock.sendall(chunk)
 
+    def set_download_state(self, file_id: str, text: str, state: str):
+        """
+        Update the Download button’s text and enabled/disabled state.
+        Called via `after(...)` from the file‐writer thread.
+        """
+        btn = self._msg_widgets.get(file_id)
+        if btn:
+            btn.configure(text=text, state=state)
+    def add_sent_file_message(self, file_id: str, file_name: str, file_size: int):
+        """
+        Called when a FILE_OFFER is sent.  Append a chat entry so the sender
+        sees \"You sent file: ...\" (you can replace with a fancier CTkFrame).
+        """
+        human = f"{file_name} ({file_size//1024} KB)"
+        self._display(f"You sent file: {human}")
+
+    def add_incoming_file_message(self, file_id, file_name, file_size):
+        """Show a file offer with a Download button."""
+        human = f"{file_name} ({file_size//1024} KB)"
+        container = ctk.CTkFrame(self.msg_frame, fg_color="#2E2E2E", corner_radius=6)
+        container.pack(anchor="w", pady=2, padx=4, fill="x")
+
+        lbl = ctk.CTkLabel(container, text=f"[FILE OFFER] {human}",
+                           text_color="#00FF00", anchor="w", padx=8)
+        lbl.pack(side="left", pady=4)
+
+        btn = ctk.CTkButton(container, text="📎 Download", width=100,
+                            state="disabled",  # initially disabled until complete
+                            command=lambda fid=file_id: self.file_manager.download_file(fid))
+        btn.pack(side="right", padx=8, pady=4)
+
+        # store the button so we can re-enable it
+        self._msg_widgets[file_id] = btn
+        self._scroll_to_bottom()
+
+    def _read_exact(self, n: int) -> bytes | None:
+        buf = bytearray()
+        while len(buf) < n:
+            chunk = self.sock.recv(n - len(buf))
+            if not chunk:
+                return None
+            buf += chunk
+        return bytes(buf)
+    
     def _recv_prefixed(self) -> bytes:
+        # 1) read exactly 4 bytes for the length header
         hdr = self.sock.recv(4)
-        length = int.from_bytes(hdr, "big") if hdr else 0
-        return b"" if not hdr or length <= 0 or length > MAX_MSG_LEN else self.sock.recv(length)
+        if not hdr or len(hdr) < 4:
+            return b""
+        length = int.from_bytes(hdr, "big")
+        # sanity check
+        if length <= 0 or length > MAX_MSG_LEN:
+            return b""
 
+        # 2) now read exactly 'length' bytes
+        data = bytearray()
+        while len(data) < length:
+            chunk = self.sock.recv(length - len(data))
+            if not chunk:
+                # real EOF
+                return b""
+            data.extend(chunk)
+        return bytes(data)
+    
     def _recv_loop(self):
         while self.running:
             try:
                 data = self._recv_prefixed()
                 if not data: raise ConnectionError("EOF")
                 # ---- frame types ----
+                if data.startswith(b"FILE_OFFER ") or data.startswith(b"FILE_CHUNK ") \
+                   or data.startswith(b"FILE_CANCEL ") or data.startswith(b"FILE_COMPLETE "):
+                    parts  = data.split(b" ", 3)
+                    ftype  = parts[0].decode()
+                    sender = parts[1].decode()
+                    blob_b64 = parts[3]
+                    self.file_manager.handle_frame(ftype, sender, blob_b64)
+                    continue
+
                 if data.startswith(b"USERS "):
                     self._update_user_list(data.split(b" ", 1)[1].decode().split(","))
                     continue
@@ -289,6 +367,18 @@ class ChatClient:
                 logger.warning("reconnect failed: %s", e)
         return False
 
+    def enable_download(self, file_id):
+        """Called by FileTransferManager when file is fully received."""
+        btn = self._msg_widgets.get(file_id)
+        if btn:
+            btn.configure(state="normal", text="⬇ Download")
+
+    def remove_file_message(self, file_id):
+        """Called on FILE_CANCEL to remove the UI entry."""
+        btn = self._msg_widgets.pop(file_id, None)
+        if btn:
+            btn.master.destroy()  # container frame        
+
     # ── GUI (unchanged) ─────────────────────────────────────────────
     def _build_gui(self):
         self.master.title(f"Secure Chat - {self.username}")
@@ -299,13 +389,18 @@ class ChatClient:
         self.master.grid_rowconfigure(1, weight=1)
 
         # sidebar
-        sidebar = ctk.CTkFrame(self.master, width=250, fg_color="#212121")
+        sidebar = ctk.CTkFrame(self.master, width=250, fg_color="#1a1a1a")
         sidebar.grid(row=0, column=0, rowspan=3, sticky="ns",
                      padx=(10, 0), pady=10)
         self.user_list = ctk.CTkScrollableFrame(sidebar, label_text="Users",
                                                 width=210, height=159,
                                                 fg_color="#212121")
         self.user_list.pack(padx=3, pady=3, anchor="center")
+
+        self.attach_btn = ctk.CTkButton(sidebar, text="Send File", command=self._on_attach)
+        self.attach_btn.pack(pady=5, padx=5)
+        # disabled until a valid peer is selected:
+        self.attach_btn.configure(state="disabled")
 
         # header
         ctk.CTkLabel(self.master, text=f"Secure Chat - {self.username}",
@@ -314,13 +409,17 @@ class ChatClient:
                      ).grid(row=0, column=1, pady=6, padx=10, sticky="ew")
 
         # chat textbox
-        frame = ctk.CTkFrame(self.master, fg_color="#3A506B")
+        frame = ctk.CTkFrame(self.master, fg_color="#1a1a1a")
         frame.grid(row=1, column=1, padx=10, pady=6, sticky="nsew")
-        self.textbox = ctk.CTkTextbox(frame, fg_color="#1a1a1a",
-                                      text_color="#00FF00",
-                                      font=("Courier New", 18),
-                                      state="disabled")
-        self.textbox.pack(fill="both", expand=True, padx=4, pady=4)
+        # self.textbox = ctk.CTkTextbox(frame, fg_color="#1a1a1a",
+        #                               text_color="#00FF00",
+        #                               font=("Courier New", 18),
+        #                               state="disabled")
+        # self.textbox.pack(fill="both", expand=True, padx=4, pady=4)
+        self.msg_frame = ctk.CTkScrollableFrame(frame, fg_color="#1a1a1a")
+        self.msg_frame.pack(fill="both", expand=True)
+        # keep track of message widgets if you want to scroll to bottom
+        self._msg_widgets = {}
 
         # message entry
         input_fr = ctk.CTkFrame(self.master, fg_color="#1a1a1a")
@@ -339,6 +438,11 @@ class ChatClient:
                       text_color="#1a1a1a", command=self._send
                       ).grid(row=0, column=1, padx=5, pady=5)
         self.entry.focus()
+
+    def _on_attach(self):
+        path = fd.askopenfilename(title="Select file to send")
+        if path:
+            self.file_manager.send_file(path, self.recipient)
 
     def _update_user_list(self, users):
         for w in self.user_list.winfo_children():
@@ -364,15 +468,29 @@ class ChatClient:
         if user in self.user_labels:
             self.user_labels[user].configure(fg_color="#2A2D2E")
 
-        # enable Send if allowed
-        self.entry.configure(
-            state="normal" if (
-                user == "Everyone" or
-                user == self.username or                       # ← NEW
-                (user in self.peer_keys and len(self.peer_keys[user]) == 32)
-            ) else "disabled"
+        # Enable text entry as before
+        can_send = (
+            user == "Everyone" or
+            user == self.username or
+            (user in self.peer_keys and len(self.peer_keys[user]) == 32)
         )
+        self.entry.configure(state="normal" if can_send else "disabled")
 
+        # Enable Attach only if a real peer with a key is selected
+        can_attach = (
+            user not in ("Everyone", self.username) and
+            (user in self.peer_keys and len(self.peer_keys[user]) == 32)
+        )
+        if hasattr(self, "attach_btn"):
+            self.attach_btn.configure(state="normal" if can_attach else "disabled")
+
+    def get_shared_key(self, user: str) -> bytes:
+        """
+        Return the 32-byte AES key derived via ECDH for the given user,
+        or b'' if not available.
+        """
+        return self.peer_keys.get(user, b"")
+    
     def _send(self, _=None):
         msg = self.entry.get().strip()
         if not msg:
@@ -457,11 +575,25 @@ class ChatClient:
                 base64.b64encode(blob)
         self._send_prefixed(frame)     
 
+    def _scroll_to_bottom(self):
+        self.msg_frame.update_idletasks()
+        if hasattr(self.msg_frame, "canvas"):
+            self.msg_frame.canvas.yview_moveto(1.0)
+        elif hasattr(self.msg_frame, "_canvas"):
+            self.msg_frame._canvas.yview_moveto(1.0)
+
     def _display(self, text):
-        self.textbox.configure(state="normal")
-        self.textbox.insert("end", text + "\n")
-        self.textbox.configure(state="disabled")
-        self.textbox.yview("end")
+        # self.textbox.configure(state="normal")
+        # self.textbox.insert("end", text + "\n")
+        # self.textbox.configure(state="disabled")
+        # self.textbox.yview("end")
+        """Show a regular text message in the scrollable frame."""
+        container = ctk.CTkFrame(self.msg_frame, fg_color="#2E2E2E", corner_radius=6)
+        container.pack(anchor="w", pady=2, padx=4, fill="x")
+        lbl = ctk.CTkLabel(container, text=text, text_color="#00FF00",
+                           anchor="w", padx=8, pady=4)
+        lbl.pack(fill="x")
+        self._scroll_to_bottom()
 
     # ── cleanup ─────────────────────────────────────────────────────
     def close(self):

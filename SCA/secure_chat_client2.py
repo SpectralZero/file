@@ -230,7 +230,14 @@ class ChatClient:
         with self.send_lock:
             self.sock.sendall(chunk)
 
-
+    def set_download_state(self, file_id: str, text: str, state: str):
+        """
+        Update the Download button’s text and enabled/disabled state.
+        Called via `after(...)` from the file‐writer thread.
+        """
+        btn = self._msg_widgets.get(file_id)
+        if btn:
+            btn.configure(text=text, state=state)
     def add_sent_file_message(self, file_id: str, file_name: str, file_size: int):
         """
         Called when a FILE_OFFER is sent.  Append a chat entry so the sender
